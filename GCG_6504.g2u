@@ -1,0 +1,491 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.FormPO..Create(BaseForm)
+Gui.FormPO..Caption("MSC Ordering")
+Gui.FormPO..Size(913,570)
+Gui.FormPO..MinX(0)
+Gui.FormPO..MinY(0)
+Gui.FormPO..Position(0,0)
+Gui.FormPO..AlwaysOnTop(False)
+Gui.FormPO..FontName("Tahoma")
+Gui.FormPO..FontSize(8.25)
+Gui.FormPO..ControlBox(True)
+Gui.FormPO..MaxButton(True)
+Gui.FormPO..MinButton(True)
+Gui.FormPO..MousePointer(0)
+Gui.FormPO..Moveable(True)
+Gui.FormPO..Sizeable(True)
+Gui.FormPO..ShowInTaskBar(True)
+Gui.FormPO..TitleBar(True)
+Gui.FormPO..Event(UnLoad,FormPO_UnLoad)
+Gui.FormPO.gsgcPO.Create(GsGridControl)
+Gui.FormPO.gsgcPO.Enabled(True)
+Gui.FormPO.gsgcPO.Visible(True)
+Gui.FormPO.gsgcPO.Zorder(0)
+Gui.FormPO.gsgcPO.Size(883,436)
+Gui.FormPO.gsgcPO.Position(14,90)
+Gui.FormPO.gsgcPO.Event(CellValueChanged,gsgcPO_CellValueChanged)
+Gui.FormPO.gsgcPO.Anchor(15)
+Gui.FormPO.cmdBrowser.Create(Button)
+Gui.FormPO.cmdBrowser.Enabled(True)
+Gui.FormPO.cmdBrowser.Visible(True)
+Gui.FormPO.cmdBrowser.Zorder(0)
+Gui.FormPO.cmdBrowser.Size(75,23)
+Gui.FormPO.cmdBrowser.Position(44,38)
+Gui.FormPO.cmdBrowser.Caption("")
+Gui.FormPO.cmdBrowser.FontName("Tahoma")
+Gui.FormPO.cmdBrowser.FontSize(8.25)
+Gui.FormPO.cmdBrowser.Event(Click,cmdBrowser_Click)
+Gui.FormPO.cmdBrowser.SvgPicture("icon_browser_color")
+Gui.FormPO.cmdBrowser.ImageAlign(8)
+Program.Sub.ScreenSU.End
+Program.Sub.Preflight.Start
+V.Global.sError.Declare(String)
+V.Global.sFile.Declare(String)
+
+Program.External.Include.Library("175100.lib")
+Program.Sub.Preflight.End
+Program.Sub.Main.Start
+'Author: Arturo Almaguer
+'Date: October 7th 2021
+'Customer: Rable Machine Inc, quote number 12792
+'Creates a new screen to process an excel file and then creates a new PO from the selected records in the gv
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+F.Intrinsic.Control.Try
+
+	V.Local.sPath.Declare(String)
+	
+	'Checking if log folder and file exists
+	F.Intrinsic.String.Build("{0}\CUSTOM\6405\LOG", V.Caller.GlobalDir, V.Local.sPath)
+	F.Intrinsic.Control.CallSub(CheckLogDir, "Path", V.Local.sPath)
+	F.Intrinsic.String.Build("{0}\6405 Log.txt", V.Local.sPath, V.Global.sFile)
+	F.Intrinsic.Control.CallSub(CheckLogFile, "File", V.Global.sFile)
+	
+	'Setting context menus
+	F.Intrinsic.Control.CallSub("SetContextMenus")
+	
+	'Displaying the form
+	GUI.FormPO.gsgcPO.Visible(False)
+	GUI.FormPO..Show
+		
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.Main.End
+Program.Sub.FormPO_UnLoad.Start
+GUI.FormPO..Visible(False)
+F.Intrinsic.Control.End
+
+Program.Sub.FormPO_UnLoad.End
+Program.Sub.cmdBrowser_Click.Start
+'This subroutine presents the user with a dialog form to select the file they want to process
+
+F.Intrinsic.Control.Try
+
+	V.Local.sFilePath.Declare(String)
+	V.Local.sMessage.Declare(String)
+		
+	F.Intrinsic.UI.ShowOpenFileDialog("", "", V.Local.sFilePath)
+	F.Intrinsic.Control.If(V.Local.sFilePath.IsNotCancel)
+		
+		'Processing file
+		F.Intrinsic.Control.CallSub("ReadFile", "FilePath", V.Local.sFilePath)
+		
+	F.Intrinsic.Control.Else
+		
+		'Displaying error message
+		F.Intrinsic.UI.Msgbox("Exported file wasn't generated. Export path required to export", "Required Field")
+		
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.cmdBrowser_Click.End
+Program.Sub.ReadFile.Start
+'This subroutine processes the selected file by the user
+
+F.Intrinsic.Control.Try
+
+	V.Local.sMessage.Declare(String)
+	V.Local.sExcelString.Declare(String)
+	V.Local.iCounter.Declare(Long)
+	
+	'Logging process
+	V.Local.sMessage.Set("Processing file")
+	F.Intrinsic.Control.CallSub(Logging, "Message", V.Local.sMessage)
+
+	'Processing csv file
+	F.Data.DataTable.CreateFromCSV("dtProcess", V.Args.FilePath, "String*!*String*!*String*!*String*!*String*!*String*!*String*!*Float*!*String*!*Long*!*Float*!*String*!*String", True)
+
+	'Logging process
+	F.Intrinsic.String.Build("File '{0}' has been processed", V.Args.FilePath, V.Local.sMessage)
+	F.Intrinsic.Control.CallSub(Logging, "Message", V.Local.sMessage)
+
+	'Calling sub to create final dt
+	F.Intrinsic.Control.CallSub("FinalDt")
+	
+	'Load grid properties
+	F.Intrinsic.Control.CallSub("LoadGrid")
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.ReadFile.End
+Program.Sub.CheckLogDir.Start
+'Checks if log directory exist, creates it if it doesn't
+
+F.Intrinsic.Control.Try
+
+	V.Local.sPath.Declare(String)
+	V.Local.bExists.Declare(Boolean)
+	
+	V.Local.sPath.Set(V.Args.Path)
+	F.Intrinsic.File.DirExists(V.Local.sPath, V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists.Not)
+		
+		F.Intrinsic.File.CreateDir(V.Local.sPath)
+	
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.CheckLogDir.End
+Program.Sub.CheckLogFile.Start
+'Checks if log file exist, creates it if it doesn't
+
+F.Intrinsic.Control.Try
+
+	V.Local.sFile.Declare(String)
+	V.Local.bExists.Declare(Boolean)
+	V.Local.sContents.Declare(String)
+	
+	V.Local.sFile.Set(V.Args.File)
+	F.Intrinsic.File.Exists(V.Local.sFile, V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists.Not)
+		
+		F.Intrinsic.String.Build("{0} {1}: Log Start", V.Ambient.Date.FormatYYYY-MM-DD, V.Ambient.Time.Format!HH:NN:SS, V.Local.sContents)
+		F.Intrinsic.File.String2File(V.Local.sFile, V.Local.sContents)
+		
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.CheckLogFile.End
+Program.Sub.Logging.Start
+'Logging
+
+F.Intrinsic.Control.Try
+
+	V.Local.sMessage.Declare(String)
+	V.Local.sContents.Declare(String)
+	
+	V.Local.sMessage.Set(V.Args.Message.Trim)
+	
+	F.Intrinsic.String.Build("{0} {1}: {2}", V.Ambient.Date.FormatYYYY-MM-DD, V.Ambient.Time.Format!HH:NN:SS, V.Local.sMessage, V.Local.sContents)
+	F.Intrinsic.File.Append2FileNewLine(V.Global.sFile, V.Local.sContents)
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.Logging.End
+Program.Sub.CatchError.Start
+F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.SubroutineCalledFrom, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Global.sError) 
+F.Intrinsic.UI.Msgbox(V.Global.sError)
+F.Intrinsic.Control.End()
+Program.Sub.CatchError.End
+Program.Sub.LoadGrid.Start
+F.Intrinsic.Control.Try
+
+	GUI.FormPO.gsgcPO.AddGridviewFromDatatable("gvPO", "dtPO")
+	
+	''General Gridview properties
+	GUI.FormPO.gsgcPO.SetGridviewProperty("gvPO", V.Enum.GridViewPropertyNames!EnableAppearanceOddRow, True)
+	GUI.FormPO.gsgcPO.SetGridviewProperty("gvPO", V.Enum.GridViewPropertyNames!RowAutoHeight, True)
+	GUI.FormPO.gsgcPO.SetGridviewProperty("gvPO", V.Enum.GridViewPropertyNames!ColumnPanelRowHeight, 45)
+	GUI.FormPO.gsgcPO.SetGridviewProperty("gvPO", V.Enum.GridViewPropertyNames!EnableAppearanceFocusedRow, True) 
+	GUI.FormPO.gsgcPO.SetGridviewProperty("gvPO", V.Enum.GridViewPropertyNames!ShowAutoFilterRow, True) 
+	GUI.FormPO.gsgcPO.SetGridviewProperty("gvPO", "OptionsViewColumnAutoWidth", False) 'It allows the user to adjust the column widths
+	
+	''Column properties
+	'WO column fixed
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "SELECT", V.Enum.ColumnPropertyNames!Fixed, "Left")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "ITEM", V.Enum.ColumnPropertyNames!Fixed, "Left")
+		
+	'Headers text wrapping
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_PART", V.Enum.ColumnPropertyNames!HeaderWordWrap, "Wrap")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_NAME", V.Enum.ColumnPropertyNames!HeaderWordWrap, "Wrap")
+	
+	'Formatting captions
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "ITEM", V.Enum.ColumnPropertyNames!Caption, "Item")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "DESCRIPTION", V.Enum.ColumnPropertyNames!Caption, "Description")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "UNIT_COST", V.Enum.ColumnPropertyNames!Caption, "Unit Cost")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!Caption, "Qty")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "TOTAL_COST", V.Enum.ColumnPropertyNames!Caption, "Total Cost")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_PART", V.Enum.ColumnPropertyNames!Caption, "Manufacturer's Part")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_NAME", V.Enum.ColumnPropertyNames!Caption, "Manufacturer's Name")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "SELECT", V.Enum.ColumnPropertyNames!Caption, "Select")
+	
+	'Formatting headers
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "ITEM", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "DESCRIPTION", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "UNIT_COST", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "TOTAL_COST", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_PART", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_NAME", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "SELECT", V.Enum.ColumnPropertyNames!HeaderFontBold, True)
+	
+	'Formatting headers allignment
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "ITEM", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "DESCRIPTION", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "UNIT_COST", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "TOTAL_COST", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_PART", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_NAME", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "SELECT", V.Enum.ColumnPropertyNames!HeaderHAlignment, "Center")
+	
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!CellHAlignment, "Far")
+	
+	'Formatting widths
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "ITEM", V.Enum.ColumnPropertyNames!MinWidth, 150)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "DESCRIPTION", V.Enum.ColumnPropertyNames!MinWidth, 380)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "UNIT_COST", V.Enum.ColumnPropertyNames!MaxWidth, 80)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!MaxWidth, 80)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "TOTAL_COST", V.Enum.ColumnPropertyNames!MinWidth, 100)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_PART", V.Enum.ColumnPropertyNames!MinWidth, 150)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_NAME", V.Enum.ColumnPropertyNames!MinWidth, 275)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "SELECT", V.Enum.ColumnPropertyNames!MaxWidth, 60)
+	
+	'Setting visible indexes
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "DESCRIPTION", V.Enum.ColumnPropertyNames!VisibleIndex, "1")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "UNIT_COST", V.Enum.ColumnPropertyNames!VisibleIndex, "2")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!VisibleIndex, "3")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "TOTAL_COST", V.Enum.ColumnPropertyNames!VisibleIndex, "4")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_PART", V.Enum.ColumnPropertyNames!VisibleIndex, "5")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "MANUFACTURER_NAME", V.Enum.ColumnPropertyNames!VisibleIndex, "6")
+	
+	'Enable SELECT column to be checked/unchecked
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "SELECT", V.Enum.ColumnPropertyNames!AllowEdit, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "SELECT", V.Enum.ColumnPropertyNames!ReadOnly, False)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!AllowEdit, True)
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "PACKET_SIZE", V.Enum.ColumnPropertyNames!ReadOnly, False)
+	
+	'Formatting amounts
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "UNIT_COST", V.Enum.ColumnPropertyNames!DisplayCustomNumeric, "$#,##0.00")
+	GUI.FormPO.gsgcPO.SetColumnProperty("gvPO", "TOTAL_COST", V.Enum.ColumnPropertyNames!DisplayCustomNumeric, "$#,##0.00")
+	
+	'Summary items
+	GUI.FormPO.gsgcPO.AddSummaryItem("gvPO", "TOTAL_COST", "PriceTotal", "SUM", "Total: ", "", c2) 'c2 =  "$#,##0.00"
+	
+	'Displaying gv
+	GUI.FormPO.gsgcPO.MainView("gvPO")
+	GUI.FormPO.gsgcPO.Visible(True)
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.LoadGrid.End
+Program.Sub.SetContextMenus.Start
+'Creates the context menus and its items
+
+F.Intrinsic.Control.Try
+	
+	GUI.FormPO..ContextMenuCreate("ctxgsgcPO")
+	GUI.FormPO.gsgcPO.ContextMenuAttach("ctxgsgcPO")
+	GUI.FormPO..ContextMenuAddItem("ctxgsgcPO","SelectAll",0,"Select All")
+	GUI.FormPO..ContextMenuAddItem("ctxgsgcPO","UnselectAll",0,"Unselect All")
+	GUI.FormPO..ContextMenuAddItem("ctxgsgcPO","GeneratePO",0,"Generate POs")
+	
+	GUI.FormPO..ContextMenuSetItemEventHandler("ctxgsgcPO","SelectAll","MenuClickSA")
+	GUI.FormPO..ContextMenuSetItemEventHandler("ctxgsgcPO","UnselectAll","MenuClickSA")
+	GUI.FormPO..ContextMenuSetItemEventHandler("ctxgsgcPO","GeneratePO","MenuGeneratePO")
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.SetContextMenus.End
+Program.Sub.MenuClickSA.Start
+'Select all or unselect all context menus
+
+F.Intrinsic.Control.Try
+	
+	V.Local.sReturn.Declare(String)
+	
+	GUI.FormPO.gsgcPO.FilterToWhereClause("gvPO", V.Local.sReturn)
+	F.Data.DataView.Create("dtPO", "dvPO", 22, V.Local.sReturn,"")
+
+	F.Intrinsic.Control.If(V.Args.ItemName,=,"SELECTALL")
+	
+		F.Data.DataView.SetValue("dtPO", "dvPO",-1,"SELECT",True)
+		
+	F.Intrinsic.Control.ElseIf(V.Args.ItemName,=,"UNSELECTALL")
+	
+		F.Data.DataView.SetValue("dtPO", "dvPO",-1,"SELECT",False)
+		
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Close("dtPO", "dvPO")
+	
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.MenuClickSA.End
+Program.Sub.MenuGeneratePO.Start
+'This subruotine creates a new PO
+
+F.Intrinsic.Control.Try
+
+	V.Local.iCounter.Declare(Long)
+	V.Local.iID.Declare(Long, 1)
+	V.Local.dDueDate.Declare(Date)
+	
+	F.Intrinsic.Date.DateAddWorkdays(V.Ambient.Date, 1, "62", V.Local.dDueDate)
+	F.Data.DataTable.AddRow("175100","ID",V.Local.iID,"AutoNumber","Y","AddComments","Y","OpenPO","Y")
+	
+	'Creating dv
+	F.Data.DataView.Create("dtPO", "dvPO", 22,"[SELECT] = 'True'", "")	
+	
+	'Looping through dv to add the lines for the PO that will be generated
+	F.Intrinsic.Control.For(V.Local.iCounter, 0, V.DataView.dtPO!dvPO.RowCount--, 1) 
+	
+		'Using callwrapper 175100's library to create PO, vendor harcoded to be MSC00
+		F.Data.DataTable.AddRow("175100File", "ID", V.Local.iID, "Vendor", "MSC00", "Part", V.DataView.dtPO!dvPO(V.Local.iCounter).ITEM!FieldValTrim, "DueDate", V.Local.dDueDate.FormatYYYYMMDD, "Description", V.DataView.dtPO!dvPO(V.Local.iCounter).DESCRIPTION!FieldValTrim, "InvUM", "EA", "InvCost", V.DataView.dtPO!dvPO(V.Local.iCounter).UNIT_COST!FieldValTrim, "InvQty", V.DataView.dtPO!dvPO(V.Local.iCounter).PACKET_SIZE!FieldValTrim, "POUM", "EA", "POCost", V.DataView.dtPO!dvPO(V.Local.iCounter).UNIT_COST!FieldValTrim, "POQty", V.DataView.dtPO!dvPO(V.Local.iCounter).PACKET_SIZE!FieldValTrim, "GLAccount", "500300", "Extension", V.DataView.dtPO!dvPO(V.Local.iCounter).UNIT_COST!FieldValTrim)
+	
+	F.Intrinsic.Control.Next(V.Local.iCounter)
+	
+	'Calling callwrapper
+	F.Intrinsic.Control.CallSub("175100Sync")
+	
+	'Closing datatables that are no longer in use
+	F.Data.DataTable.Close("175100")
+	F.Data.DataTable.Close("175100File")
+	
+	'Calling sub to update information in DB
+	F.Intrinsic.Control.CallSub("UpdateData")
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.MenuGeneratePO.End
+Program.Sub.gsgcPO_CellValueChanged.Start
+'To update dt from modify cells in gv
+
+F.Intrinsic.Control.Try
+
+	F.Intrinsic.Control.SelectCase(V.Args.Column)
+
+		F.Intrinsic.Control.Case("PACKET_SIZE")
+			F.Data.DataTable.SetValue("dtPO", V.Args.RowIndex, V.Args.Column, V.Args.Value)
+
+	F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.gsgcPO_CellValueChanged.End
+Program.Sub.UpdateData.Start
+'This subroutine updates information for the newly generated PO
+
+F.Intrinsic.Control.Try
+
+	V.Local.sSQL.Declare(String)
+	V.Local.iCounter.Declare(Long)
+	V.Local.sPO.Declare(String)
+	V.Local.sMessage.Declare(String)
+	
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	
+	'Getting recently created PO number, vendor harcoded to be MSC00
+	F.ODBC.Connection!Con.ExecuteAndReturn("select top 1 RTRIM(PURCHASE_ORDER) PURCHASE_ORDER from V_PO_HEADER where VENDOR = 'MSC00' order by DATE_ORDER desc;", V.Local.sPO)
+	
+	'Updating GL accound number in DB, GL account harcoded to be 500300
+	F.Intrinsic.String.Build("update PO_HEADER set GL_ACCOUNT = '500300' where PURCHASE_ORDER = '{0}' and RECORD_NO = '  A';", V.Local.sPO, V.Local.sSQL)
+	F.ODBC.Connection!Con.Execute(V.Local.sSQL)
+	
+	'Looping through selected records to update manufacturer's information in DB
+	F.Intrinsic.Control.For(V.Local.iCounter, 0, V.DataView.dtPO!dvPO.RowCount--, 1) 
+		
+		F.Intrinsic.String.Build("update PO_LINES set MFG_NAME = '{0}', PART_MFG_NO = '{1}', PRODUCT_LINE = 'ZC' where PURCHASE_ORDER = '{2}' and PART = '{3}';", V.DataView.dtPO!dvPO(V.Local.iCounter).MANUFACTURER_NAME!FieldValTrim, V.DataView.dtPO!dvPO(V.Local.iCounter).MANUFACTURER_PART!FieldValTrim, V.Local.sPO, V.DataView.dtPO!dvPO(V.Local.iCounter).ITEM!FieldValTrim, V.Local.sSQL)
+		F.ODBC.Connection!Con.Execute(V.Local.sSQL)
+	
+	F.Intrinsic.Control.Next(V.Local.iCounter)
+	F.ODBC.Connection!Con.Close
+	
+	'Msgbox to inform the user that the process ran successfully and closing screen
+	F.Intrinsic.String.Build("The process ran successfully. Newly PO created is: '{0}'", V.Local.sPO, V.Local.sMessage)
+	F.Intrinsic.UI.Msgbox(V.Local.sMessage, "Process confirmation")
+	F.Intrinsic.Control.CallSub("FormPO_UnLoad")
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.UpdateData.End
+Program.Sub.FinalDt.Start
+
+V.Local.iCounter.Declare(Long)
+V.Local.sDescription.Declare(String)
+V.Local.sBrand.Declare(String)
+
+f.Data.DataTable.Create("dtPO", True)
+F.Data.DataTable.AddColumn("dtPO", "ITEM", "String")
+F.Data.DataTable.AddColumn("dtPO", "DESCRIPTION", "String")
+F.Data.DataTable.AddColumn("dtPO", "UNIT_COST", "Float")
+F.Data.DataTable.AddColumn("dtPO", "PACKET_SIZE", "Long")
+F.Data.DataTable.AddColumn("dtPO", "MANUFACTURER_PART", "String")
+F.Data.DataTable.AddColumn("dtPO", "MANUFACTURER_NAME", "String")
+F.Data.DataTable.AddColumn("dtPO", "SELECT", "Boolean", False)
+F.Data.DataTable.AddExpressionColumn("dtPO", "TOTAL_COST", "Float","[UNIT_COST] * [PACKET_SIZE]")
+
+F.Intrinsic.Control.For(V.Local.iCounter, 0, V.DataTable.dtProcess.RowCount--, 1) 
+	
+	V.Local.sDescription.Set(V.DataTable.dtProcess(V.Local.iCounter).Item Description!FieldValTrim)
+	V.Local.sBrand.Set(V.DataTable.dtProcess(V.Local.iCounter).Brand!FieldValTrim)
+	F.Intrinsic.String.Replace(V.Local.sDescription, "'", "''", V.Local.sDescription)
+	F.Intrinsic.String.Replace(V.Local.sBrand, "'", "''", V.Local.sBrand)
+	
+	F.Data.DataTable.AddRow("dtPO", "ITEM", V.DataTable.dtProcess(V.Local.iCounter).Item!FieldValTrim, "DESCRIPTION", V.Local.sDescription, "UNIT_COST", V.DataTable.dtProcess(V.Local.iCounter).Unit Cost!FieldValTrim, "PACKET_SIZE", V.DataTable.dtProcess(V.Local.iCounter).Refill To Max- Rounded Down to Packet Size!FieldValTrim, "MANUFACTURER_PART", V.DataTable.dtProcess(V.Local.iCounter).Supplier Part Number!FieldValTrim, "MANUFACTURER_NAME", V.Local.sBrand)
+	
+F.Intrinsic.Control.Next(V.Local.iCounter)
+
+f.Data.DataTable.Close("dtProcess")
+Program.Sub.FinalDt.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$apadilla$}$20211104115242267$}$Lag9STqBJOmNXSbd5+msRcBWPGz0aFqSwHruISZ+s7ycDdK1hmfT3mNXA+TFT+3oGHzSEmKAj3CGEjMCnZLmlw==
+Program.Sub.Comments.End
